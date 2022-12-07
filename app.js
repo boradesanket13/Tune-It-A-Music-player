@@ -124,6 +124,15 @@ let poster_master_play = document.getElementById('poster_master_play');
 let title = document.getElementById('title');
 Array.from(document.getElementsByClassName('playListPlay')).forEach((element)=>{
     element.addEventListener('click', (e)=>{
+    
+/* 
+Check if the music is already being played or not.
+
+If already played then to pause the music, change the icon from pause to play, change masterplay button from pause to play.
+If not already being played, then continue old logic  
+
+*/
+
         if(e.target.classList.contains("bi-play-circle-fill"))
         {
             index = e.target.id;
