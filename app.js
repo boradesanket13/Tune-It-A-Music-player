@@ -4,7 +4,7 @@
 var queue = "";
 var access_token = null;
 var refresh_token = null;
-var redirect_uri = "http://127.0.0.1:5500"; // change this your value
+var redirect_uri = "http://127.0.0.1:5500/index.html"; // change this your value
 var client_id = ""; 
 var client_secret = ""; // In a real app you should not expose your client_secret to the user
 const AUTHORIZE = "https://accounts.spotify.com/authorize";
