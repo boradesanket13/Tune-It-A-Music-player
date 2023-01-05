@@ -1,3 +1,714 @@
+// let seed_artists = '';
+// let seed_genres = '';
+// let seed_tracks = '';
+var queue = "";
+var access_token = null;
+var refresh_token = null;
+var redirect_uri = "http://127.0.0.1:5500/index.html"; // change this your value
+var client_id = ""; 
+var client_secret = ""; // In a real app you should not expose your client_secret to the user
+const AUTHORIZE = "https://accounts.spotify.com/authorize";
+const TOKEN = "https://accounts.spotify.com/api/token";
+
+
+//api links
+const PLAY = "https://api.spotify.com/v1/me/player/play";
+const PLAYER = "https://api.spotify.com/v1/me/player";
+const USER = `https://api.spotify.com/v1/me`;
+// const LIKEDTRACKS = 'https://api.spotify.com/v1/me/tracks'
+const TOPTRACKS = "https://api.spotify.com/v1/me/top/tracks?limit=10";
+const TOPARTISTS = 'https://api.spotify.com/v1/me/top/artists?limit=10';
+const RECENTLY_PLAYED = 'https://api.spotify.com/v1/me/player/recently-played?limit=10';
+const DEVICES = "https://api.spotify.com/v1/me/player/devices";
+const FOLLOWED_ARTISTS = 'https://api.spotify.com/v1/me/following?type=artist';
+const SAVED_ALBUMS = 'https://api.spotify.com/v1/me/albums?limit=10';
+
+onPageLoad();
+
+function onPageLoad(){
+    client_id = localStorage.getItem("client_id");
+    client_secret = localStorage.getItem("client_secret");
+    if ( window.location.search.length > 0 ){
+        handleRedirect();
+    }
+    else{
+        access_token = localStorage.getItem("access_token");
+    }
+}
+
+function handleRedirect(){
+    let code = getCode();
+    fetchAccessToken(code);
+    window.history.pushState("", "", redirect_uri); // remove param from url
+}
+
+function fetchAccessToken(code){
+    let body = "grant_type=authorization_code";
+    body += "&code=" + code; 
+    body += "&redirect_uri=" + encodeURI(redirect_uri);
+    body += "&client_id=" + client_id;
+    body += "&client_secret=" + client_secret;
+    callAuthorizationApi(body);
+}
+
+function refreshAccessToken(){
+    refresh_token = localStorage.getItem("refresh_token");
+    let body = "grant_type=refresh_token";
+    body += "&refresh_token=" + refresh_token;
+    body += "&client_id=" + client_id;
+    callAuthorizationApi(body);
+}
+
+function callAuthorizationApi(body){
+    let xhr = new XMLHttpRequest();
+    xhr.open("POST", TOKEN, true);
+    xhr.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
+    xhr.setRequestHeader('Authorization', 'Basic ' + btoa(client_id + ":" + client_secret));
+    xhr.send(body);
+    xhr.onload = handleAuthorizationResponse;
+}
+
+function handleAuthorizationResponse(){
+    if ( this.status == 200 ){
+        var data = JSON.parse(this.responseText);
+        console.log(data);
+        var data = JSON.parse(this.responseText);
+        if ( data.access_token != undefined ){
+            access_token = data.access_token;
+            // console.log(access_token);
+            localStorage.setItem("access_token", access_token);
+        }
+        if ( data.refresh_token  != undefined ){
+            refresh_token = data.refresh_token;
+            localStorage.setItem("refresh_token", refresh_token);
+        }
+        onPageLoad();
+    }
+    else {
+        console.log(this.responseText);
+        alert(this.responseText);
+    }
+}
+
+function getCode(){
+    let code = null;
+    const queryString = window.location.search;
+    if( queryString.length > 0){
+        const urlParams = new URLSearchParams(queryString);
+        code = urlParams.get('code')
+    }
+    return code;
+}
+
+function callApi(method, url, body, callback){
+    let xhr = new XMLHttpRequest();
+    xhr.open(method, url, true);
+    xhr.setRequestHeader('Content-Type', 'application/json');
+    xhr.setRequestHeader('Authorization', 'Bearer ' + access_token);
+    xhr.send(body);
+    xhr.onload = callback;
+}
+
+// function mergelink(text){
+//     const RECOMMENDATIONS
+// }
+
+//top tracks api call
+callApi( "GET", TOPTRACKS, null, handleTopTracksResponse );
+
+function handleTopTracksResponse(){
+    if( this.status == 200 ){
+        var data_toptracks = JSON.parse(this.responseText);
+        console.log(data_toptracks);
+
+        // seed_tracks = 'seed_tracks=';
+        // for( let i=1;i<=5;i++){
+        //     if(i==5){
+        //         seed_tracks+=`${data_toptracks.items[i].id}&`
+        //     }
+        //     else{
+        //         seed_tracks+=`${data_toptracks.items[i].id}%2C`
+        //     }
+        // }
+        // mergelink(seed_tracks);
+        const RECOMMENDATIONS = `https://api.spotify.com/v1/recommendations?limit=10&market=IN&seed_artists=${data_toptracks.items[0].artists[0].id}&seed_tracks=${data_toptracks.items[0].id}`;
+        callApi( "GET", RECOMMENDATIONS, null, handleRecommendationsResponse );
+
+        const TOPARTIST_TOPTRACK = `https://api.spotify.com/v1/artists/${data_toptracks.items[0].artists[0].id}/top-tracks?market=IN`;
+        callApi( "GET", TOPARTIST_TOPTRACK, null, handleTopArtistResponse );
+
+        const container = document.getElementById('liked-songs');
+        let adder = '';
+        data_toptracks.items.forEach( song_ => {
+            adder+=`<li class="songItem">
+                        <div class="img_play">
+                            <img src="${song_.album.images[0].url}" alt="${song_.artists[0].name}">
+                            <i class="bi playListPlay bi-play-circle-fill" id="${song_.id}" onclick="songClick('${song_.id}')"></i>
+                        </div>
+                        <h5>${song_.name}
+                            <br>
+                            <div class="subtitle">${song_.artists[0].name}</div>
+                        </h5>
+                    </li>`
+        })
+        container.innerHTML = adder;
+        // console.log(data_user.images[0].url);
+    }
+    else if ( this.status == 401 ){
+        refreshAccessToken();
+        // console.log('helloo3');
+    }
+    else {
+        console.log(this.responseText);
+        alert(this.responseText);
+    }
+}
+
+//top-artist api call
+function handleTopArtistResponse(){
+    if( this.status == 200 ){
+        var data_topartist = JSON.parse(this.responseText);
+        console.log(data_topartist);
+        const bgimg = document.getElementById('cover-img');
+        bgimg.src = `${data_topartist.tracks[0].album.images[0].url}`;
+        const top_artist_song = document.getElementById('top-artist-song');
+        top_artist_song.textContent = data_topartist.tracks[0].album.artists[0].name + ' - ' + data_topartist.tracks[0].name ;
+        const date = document.getElementById('release_date');
+        date.textContent = data_topartist.tracks[0].album.release_date;
+    }
+    else if ( this.status == 401 ){
+        refreshAccessToken();
+        // console.log('helloo3');
+    }
+    else {
+        console.log(this.responseText);
+        alert(this.responseText);
+    }
+}
+
+//saved-albums api call
+callApi( "GET", SAVED_ALBUMS, null, handleSavedAlbumsResponse );
+
+function handleSavedAlbumsResponse(){
+    if( this.status == 200 ){
+        var data_savedAlbums = JSON.parse(this.responseText);
+        console.log(data_savedAlbums);
+
+        const container = document.getElementById('saved-albums');
+        let adder = '';
+        data_savedAlbums.items.forEach(album_ => {
+            adder+=`<li class="songItem">
+                        <div class="img_play">
+                            <img src="${album_.album.images[0].url}" alt="${album_.album.artists[0].name}">
+                            <i class="bi playListPlay bi-play-circle-fill" id="${album_.id}" onclick="songClick('${album_.id}')"></i>
+                        </div>
+                        <h5>${album_.album.name}
+                            <br>
+                            <div class="subtitle">${album_.album.artists[0].name}</div>
+                        </h5>
+                    </li>`
+        })
+        container.innerHTML = adder;
+        
+    }
+    else if ( this.status == 401 ){
+        refreshAccessToken();
+        // console.log('helloo3');
+    }
+    else {
+        console.log(this.responseText);
+        alert(this.responseText);
+    }
+}
+
+//user api call
+callApi( "GET", USER, null, handleUsersResponse );
+
+function handleUsersResponse(){
+    if( this.status == 200 ){
+        var data_user = JSON.parse(this.responseText);
+        console.log(data_user);
+        const userimg = document.getElementById('userimg');
+        const username = document.getElementById('username');
+        const profileimg = document.getElementById('profile_img');
+        const profilename = document.getElementById('profile_name');
+        profileimg.src = data_user.images[0].url;
+        profilename.textContent = data_user.display_name;
+        userimg.src = data_user.images[0].url;
+        username.textContent = data_user.display_name;
+
+        const PLAYLISTS = `https://api.spotify.com/v1/users/${data_user.id}/playlists?limit=10`;
+        callApi( "GET", PLAYLISTS, null, handlePlaylistsResponse );
+        // console.log(data_user.images[0].url);
+    }
+    else if ( this.status == 401 ){
+        refreshAccessToken();
+        // console.log('helloo3');
+    }
+    else {
+        console.log(this.responseText);
+        alert(this.responseText);
+    }
+}
+
+//devices api call
+callApi( "GET", DEVICES, null, handleDevicesResponse );
+
+function handleDevicesResponse(){
+    if ( this.status == 200 ){
+        var data_devices = JSON.parse(this.responseText);
+        console.log(data_devices);
+        const devices = document.getElementById('devices');
+        data_devices.devices.forEach( device_ => {
+            let node = document.createElement('option');
+            node.value = device_.id;
+            node.innerHTML = device_.name;
+            devices.appendChild(node);
+        })
+        // removeAllItems( "devices" );
+        // data.devices.forEach(item => addDevice(item));
+    }
+    else if ( this.status == 401 ){
+        refreshAccessToken()
+    }
+    else {
+        console.log(this.responseText);
+        alert(this.responseText);
+    }
+}
+
+
+//playlists api call
+function handlePlaylistsResponse(){
+    if( this.status == 200 ){
+        var data_playlists = JSON.parse(this.responseText);
+        console.log(data_playlists);
+        const container = document.getElementById('menu-song');
+        let c=0;
+        let adder = '';
+        data_playlists.items.forEach( playlist_ => {
+            c+=1;
+            adder+=`<li class="songItem">
+                        <span>${c}</span>
+                        <img src="${playlist_.images[0].url}" alt="${playlist_.name}">
+                        <h5>
+                            ${playlist_.name}
+                            <div class="subtitle">${playlist_.owner.display_name}</div>
+                        </h5>
+                        <i class="bi playListPlay bi-play-circle-fill" id="${playlist_.id}" onclick="playlistClick('${playlist_.id}')"></i>
+                    </li>`
+        })
+        container.innerHTML = adder;
+    }
+    else if ( this.status == 401 ){
+        refreshAccessToken();
+        // console.log('helloo3');
+    }
+    else {
+        console.log(this.responseText);
+        alert(this.responseText);
+    }
+}
+
+//followed artists api call
+callApi( "GET", FOLLOWED_ARTISTS, null, handleFollowedArtistsResponse );
+
+function handleFollowedArtistsResponse(){
+    if( this.status == 200 ){
+        var data_followartists = JSON.parse(this.responseText);
+        console.log(data_followartists);
+
+        const container = document.getElementById('follow-artists');
+        let adder = '';
+        data_followartists.artists.items.forEach( artist_ => {
+            adder+=`<li>
+                        <img src="${artist_.images[0].url}" alt="${artist_.name}" title="${artist_.name}" id="${artist_.id}" onclick="artistClick('${artist_.id}')">
+                        <div class="subtitle">${artist_.name}</div>
+                    </li>`
+            })
+        container.innerHTML = adder;
+    }
+    else if ( this.status == 401 ){
+        refreshAccessToken();
+        // console.log('helloo3');
+    }
+    else {
+        console.log(this.responseText);
+        alert(this.responseText);
+    }
+}
+
+// recently played api call
+callApi( "GET", RECENTLY_PLAYED, null, handleRecentlyPlayedResponse );
+
+function handleRecentlyPlayedResponse(){
+    if( this.status == 200 ){
+        var data_recentlyPlayed = JSON.parse(this.responseText);
+        console.log(data_recentlyPlayed);
+        const container = document.getElementById('recently-played');
+        let c=0;
+        let adder = '';
+        data_recentlyPlayed.items.forEach( song_ => {
+            c+=1;
+            adder+=`<li class="songItem">
+                        <span>${c}</span>
+                        <img src="${song_.track.album.images[0].url}" alt="${song_.track.name}">
+                        <h5>
+                            ${song_.track.name}
+                            <div class="subtitle">${song_.track.artists[0].name}</div>
+                        </h5>
+                        <i class="bi playListPlay bi-play-circle-fill" id="${song_.track.id}" onclick="songClick('${song_.track.id}')"></i>
+                    </li>`
+        })
+        container.innerHTML = adder;
+    }
+    else if ( this.status == 401 ){
+        refreshAccessToken();
+        // console.log('helloo3');
+    }
+    else {
+        console.log(this.responseText);
+        alert(this.responseText);
+    }
+}
+
+// top artists api call
+callApi( "GET", TOPARTISTS, null, handleTopArtistsResponse );
+
+function handleTopArtistsResponse(){
+    if( this.status == 200 ){
+        var data_topartists = JSON.parse(this.responseText);
+        console.log(data_topartists);
+
+        // seed_artists = 'seed_artists=';
+        // seed_genres = 'seed_genres=';
+        // for( let i=1;i<=5;i++){
+        //     if(i==5){
+        //         seed_artists+=`${data_topartists.items[i].id}&`
+        //         seed_genres+=`${data_topartists.items[i].genres[0]}`
+        //     }
+        //     else{
+        //         seed_artists+=`${data_topartists.items[i].id}%2C`
+        //         seed_genres+=`${data_topartists.items[i].genres[0]}%2C`
+        //     }
+        // }
+        // mergelink(seed_artists);
+        // mergelink(seed_genres)
+        // const top_song = getTopSong(TOPARTISTSONG);
+        // top_artist_song.textContent = data_topartists.items[0].name + '-' + top_song ;
+        const container = document.getElementById('fav-artists');
+        let adder = '';
+        data_topartists.items.forEach( artist_ => {
+            adder+=`<li>
+                        <img src="${artist_.images[0].url}" alt="${artist_.name}" title="${artist_.name}" id="${artist_.id}" onclick="artistClick('${artist_.id}')">
+                        <div class="subtitle">${artist_.name}</div>
+                    </li>`
+            })
+        container.innerHTML = adder;
+    }
+    else if ( this.status == 401 ){
+        refreshAccessToken();
+        // console.log('helloo3');
+    }
+    else {
+        console.log(this.responseText);
+        alert(this.responseText);
+    }
+}
+
+function handlePlaylistTracksResponse(){
+    if ( this.status == 200 ){
+        var data = JSON.parse(this.responseText);
+        console.log(data);
+    }
+    else if ( this.status == 401 ){
+        refreshAccessToken()
+    }
+    else {
+        console.log(this.responseText);
+        alert(this.responseText);
+    }
+}
+
+function deviceid(){
+    return document.getElementById("devices").value;
+}
+// recommendations api call
+
+function handleRecommendationsResponse(){
+    if( this.status == 200 ){
+        var data_recommendations = JSON.parse(this.responseText);
+        console.log(data_recommendations);
+        const container = document.getElementById('recommendations');
+        let c=0;
+        let adder = '';
+        data_recommendations.tracks.forEach( song_ => {
+            c+=1;
+            adder+=`<li class="songItem">
+                        <span>${c}</span>
+                        <img src="${song_.album.images[0].url}" alt="${song_.name}">
+                        <h5>
+                            ${song_.name}
+                            <div class="subtitle">${song_.artists[0].name}</div>
+                        </h5>
+                        <i class="bi playListPlay bi-play-circle-fill" id="${song_.id}" onclick="songClick('${song_.id}')"></i>
+                    </li>`
+        })
+        container.innerHTML = adder;
+    }
+    else if ( this.status == 401 ){
+        refreshAccessToken();
+        // console.log('helloo3');
+    }
+    else {
+        console.log(this.responseText);
+        alert(this.responseText);
+    }
+}
+
+//********    sidebar functions start     **********
+function change1(){
+    const container = document.getElementById('menu-song');
+    const element = document.getElementById('link1');
+    if(element.classList.contains('active')){
+    }
+    else{
+        element.classList.add('active');
+        container.style.display = "block";
+
+        const element2 = document.getElementById('link2');
+        const container2 = document.getElementById('recently-played');
+        if(element2.classList.contains('active')){
+            element2.classList.remove('active');
+            container2.style.display = "none";
+        }
+
+        const element3 = document.getElementById('link3');
+        const container3 = document.getElementById('recommendations');
+        if(element3.classList.contains('active')){
+            element3.classList.remove('active');
+            container3.style.display = "none";
+        }
+    }
+}
+
+function change2(){
+    const container = document.getElementById('recently-played');
+    const element = document.getElementById('link2');
+    if(element.classList.contains('active')){
+    }
+    else{
+        element.classList.add('active');
+        container.style.display = "block";
+
+        const element1 = document.getElementById('link1');
+        const container1 = document.getElementById('menu-song');
+        if(element1.classList.contains('active')){
+            element1.classList.remove('active');
+            container1.style.display = "none";
+        }
+
+        const element3 = document.getElementById('link3');
+        const container3 = document.getElementById('recommendations');
+        if(element3.classList.contains('active')){
+            element3.classList.remove('active');
+            container3.style.display = "none";
+        }
+    }
+}
+
+function change3(){
+    const container = document.getElementById('recommendations');
+    const element = document.getElementById('link3');
+    if(element.classList.contains('active')){
+    }
+    else{
+        element.classList.add('active');
+        container.style.display = "block";
+
+        const element1 = document.getElementById('link1');
+        const container1 = document.getElementById('menu-song');
+        if(element1.classList.contains('active')){
+            element1.classList.remove('active');
+            container1.style.display = "none";
+        }
+
+        const element2 = document.getElementById('link2');
+        const container2 = document.getElementById('recently-played');
+        if(element2.classList.contains('active')){
+            element2.classList.remove('active');
+            container2.style.display = "none";
+        }
+    }
+}
+//********    sidebar functions end     **********
+
+
+//********    user data functions     **********
+
+function userClick(){
+    const container1 = document.getElementById('content');
+    const container2 = document.getElementById('popular_song');
+    const container3 = document.getElementById('popular_artists');
+    container1.style.display = "none";
+    container2.style.display = "none";
+    container3.style.display = "none";
+
+    const focus = document.getElementsByClassName('focus');
+    focus[0].classList.remove('focus');
+
+    const display = document.getElementById('user-info');
+    display.style.display = "block";
+}
+
+function navClick1(){
+    const element = document.getElementById('nav1');
+    if(!element.classList.contains('focus')){
+        element.classList.add('focus');
+        const element2 = document.getElementById('nav2');
+        const element3 = document.getElementById('nav3');
+        if(element2.classList.contains('focus'))
+        element2.classList.remove('focus');
+        else
+        element3.classList.remove('focus');
+
+        const container1 = document.getElementById('content');
+        const container2 = document.getElementById('popular_song');
+        const container3 = document.getElementById('popular_artists');
+        container1.style.display = "block";
+        container2.style.display = "block";
+        container3.style.display = "block";
+
+        const display = document.getElementById('user-info');
+        display.style.display = "none";
+    }
+}
+
+function navClick2(){
+    const element = document.getElementById('nav2');
+    if(!element.classList.contains('focus')){
+        element.classList.add('focus');
+        const element1 = document.getElementById('nav1');
+        const element3 = document.getElementById('nav3');
+        if(element1.classList.contains('focus'))
+        element1.classList.remove('focus');
+        else
+        element3.classList.remove('focus');
+
+        const container1 = document.getElementById('content');
+        const container2 = document.getElementById('popular_song');
+        const container3 = document.getElementById('popular_artists');
+        container1.style.display = "none";
+        container2.style.display = "none";
+        container3.style.display = "none";
+
+        const display = document.getElementById('user-info');
+        display.style.display = "none";
+    }
+}
+
+function navClick3(){
+    const element = document.getElementById('nav3');
+    if(!element.classList.contains('focus')){
+        element.classList.add('focus');
+        const element2 = document.getElementById('nav2');
+        const element1 = document.getElementById('nav1');
+        if(element2.classList.contains('focus'))
+        element2.classList.remove('focus');
+        else
+        element1.classList.remove('focus');
+
+        const container1 = document.getElementById('content');
+        const container2 = document.getElementById('popular_song');
+        const container3 = document.getElementById('popular_artists');
+        container1.style.display = "none";
+        container2.style.display = "none";
+        container3.style.display = "none";
+
+        const display = document.getElementById('user-info');
+        display.style.display = "none";
+    }
+}
+
+
+//********    user data functions     **********
+
+
+//********    click functions     **********
+
+// const buttons = document.getElementsByClassName('playListPlay');
+// buttons.forEach(button => {
+//     button.addEventListener('click', buttonPressed);
+// })
+const songClick = id => {
+    console.log(id);
+}
+
+const playlistClick = id => {
+    // const PLAYLIST_TRACKS = `https://api.spotify.com/v1/playlists/${id}/tracks?limit=100`;
+    // callApi( "GET", PLAYLIST_TRACKS, null, handlePlaylistTracksResponse );
+    let body={};
+    body.context_uri = "spotify:playlist:" + id;
+    body.offset={};
+    // callApi( "PUT", PLAY + "?device_id=" + deviceid(), JSON.stringify(body), handlePlayResponse );
+}
+
+const artistClick = id => {
+    console.log(id);
+}
+
+function handlePlayResponse(){
+    if ( this.status == 200){
+        console.log(this.responseText);
+        setTimeout(currentlyPlaying, 2000);
+    }
+    else if ( this.status == 204 ){
+        setTimeout(currentlyPlaying, 2000);
+    }
+    else if ( this.status == 401 ){
+        refreshAccessToken()
+    }
+    else {
+        console.log(this.responseText);
+        alert(this.responseText);
+    }    
+
+}
+
+function currentlyPlaying(){
+    callApi( "GET", PLAYER + "?market=IN", null, handleCurrentlyPlayingResponse );
+}
+
+function handleCurrentlyPlayingResponse(){
+    if ( this.status == 200 ){
+        var data = JSON.parse(this.responseText);
+        console.log(data);
+        if ( data.item != null ){
+            document.getElementById("poster_master_play").src = data.item.album.images[0].url;
+            document.getElementById("title").innerHTML = data.item.name;
+            document.getElementById("current_artist").innerHTML = data.item.artists[0].name;
+        }
+
+
+    }
+    else if ( this.status == 204 ){
+
+    }
+    else if ( this.status == 401 ){
+        refreshAccessToken()
+    }
+    else {
+        console.log(this.responseText);
+        alert(this.responseText);
+    }
+}
+
+
+
+//********    click functions     **********
+
+
+
 const music = new Audio('vande.mp3');
 
 // create Array 
